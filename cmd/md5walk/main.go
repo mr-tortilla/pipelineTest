@@ -16,38 +16,27 @@ const defaultParallelism = 10
 func main() {
 	dir, parallelism := parseArgs()
 
-	// каналы между нодами
-	paths := make(chan string)
-	results := make(chan node.Result)
-	errs := make(chan error)
+	paths := make(chan any)
+	results := make(chan any)
+	errs := make(chan any)
 
-	// нода обхода директории
-	walk := &node.WalkNode{Dir: dir, Out: paths, ErrOut: errs}
+	walk := &node.WalkNode{Dir: dir}
+	print := &node.PrintNode{}
+	errNode := &node.ErrNode{}
 
-	// группа нод вычисления MD5
-	hashNodes := make([]pipeline.Node, parallelism)
+	p := pipeline.NewPipeline()
+
+	// соединяем walk со всеми HashNode через один канал
 	for i := 0; i < parallelism; i++ {
-		hashNodes[i] = &node.HashNode{In: paths, Out: results, ErrOut: errs}
+		hash := &node.HashNode{}
+		p.Connect(walk, hash, paths)
+		p.Connect(hash, print, results)
+		p.Connect(hash, errNode, errs)
+		p.Add(hash)
 	}
-	hashGroup := pipeline.NewNodeGroup(
-		func() {
-			close(results)
-			close(errs)
-		},
-		hashNodes...,
-	)
 
-	// нода печати результатов
-	print := &node.PrintNode{In: results}
+	p.Add(walk, print, errNode)
 
-	// нода печати ошибок
-	errNode := &node.ErrNode{In: errs}
-
-	// собираем пайплайн
-	p := pipeline.New()
-	p.Add(walk, hashGroup, print, errNode)
-
-	// обработка прерывания
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 

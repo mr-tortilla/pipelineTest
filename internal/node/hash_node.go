@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-
-	"github.com/mr-tortilla/pipelineLibrary"
 )
 
-var _ pipeline.Node = (*HashNode)(nil)
+// var _ pipeline.Node = (*HashNode)(nil)
 
 // Result содержит результат вычисления MD5 хеша файла
 type Result struct {
@@ -20,34 +18,41 @@ type Result struct {
 
 // HashNode вычисляет MD5 хеш для каждого файла из входного канала
 type HashNode struct {
-	In     <-chan string // входной канал с путями файлов
-	Out    chan<- Result // выходной канал с результатами
-	ErrOut chan<- error  // канал ошибок
+	inputs  []chan any
+	outputs []chan any
 }
+
+func (n *HashNode) SetInputs(inputs []chan any)   { n.inputs = inputs }
+func (n *HashNode) SetOutputs(outputs []chan any) { n.outputs = outputs }
 
 // Run читает пути из входного канала и вычисляет MD5 хеш для каждого файла
 func (n *HashNode) Run(ctx context.Context) {
+	in := n.inputs[0]
+	out := n.outputs[0]
+	err := n.outputs[1]
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case path, ok := <-n.In:
+		case val, ok := <-in:
 			if !ok {
 				return
 			}
-			hash, err := hashFile(path)
-			if err != nil {
+			path := val.(string)
+			hash, e := hashFile(path)
+			if e != nil {
 				select {
 				case <-ctx.Done():
 					return
-				case n.ErrOut <- fmt.Errorf("%s: %w", path, err):
+				case err <- fmt.Errorf("%s: %w", path, e):
 				}
 				continue
 			}
 			select {
 			case <-ctx.Done():
 				return
-			case n.Out <- Result{Path: path, Hash: hash}:
+			case out <- Result{Path: path, Hash: hash}:
 			}
 		}
 	}
