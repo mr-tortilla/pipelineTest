@@ -20,22 +20,22 @@ func main() {
 	results := make(chan any)
 	errs := make(chan any)
 
-	walk := &node.WalkNode{Dir: dir}
-	print := &node.PrintNode{}
+	walkNode := &node.WalkNode{Dir: dir}
+	printNode := &node.PrintNode{}
 	errNode := &node.ErrNode{}
 
 	p := pipeline.NewPipeline()
 
-	// соединяем walk со всеми HashNode через один канал
+	// соединяем walkNode со всеми HashNode через один канал
 	for i := 0; i < parallelism; i++ {
-		hash := &node.HashNode{}
-		p.Connect(walk, hash, paths)
-		p.Connect(hash, print, results)
-		p.Connect(hash, errNode, errs)
-		p.Add(hash)
+		hashNode := &node.HashNode{}
+		p.Connect(walkNode, hashNode, paths)
+		p.Connect(hashNode, printNode, results)
+		p.Connect(hashNode, errNode, errs)
+		p.Add(hashNode)
 	}
 
-	p.Add(walk, print, errNode)
+	p.Add(walkNode, printNode, errNode)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
